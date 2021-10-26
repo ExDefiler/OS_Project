@@ -1,22 +1,36 @@
 from socket import *
 
-HOST = '127.0.0.1'
+SERVER = gethostbyname(gethostname())
 PORT = 2021
+CLIENT_PORT = 2022
 BUF_SIZE = 1024
-CONNECTED_USERS = []
 
-with socket(AF_INET, SOCK_STREAM) as s:
-    s.bind((HOST, PORT))
-    s.listen()
+server = socket(AF_INET, SOCK_STREAM)
+server.bind((SERVER, PORT))
+
+
+def start():
+
+    server.listen()
+    print(f"[LISTENING] Server is listening on {SERVER}")
 
     while True:
-        print("Waiting for a connection...")
-        conn, address = s.accept()
+
+        conn, address = server.accept()
+        connected = True
+        msg_socket = socket(AF_INET, SOCK_STREAM)
+
         username = conn.recv(BUF_SIZE).decode().split()[1]
-        print(f"Accepted connection request from {username}: {address}.")
+        print(f"[NEW CONNECTION] User {username}: {address} connected.")
         conn.send("OK".encode())
 
-        while True:
+        try:
+            msg_socket.connect((address[0], CLIENT_PORT))
+        except error:
+            print("Failed to connect to client's message receiving port.")
+
+        while connected:
+
             try:
                 command = conn.recv(BUF_SIZE).decode()
             except error as err:
@@ -31,7 +45,9 @@ with socket(AF_INET, SOCK_STREAM) as s:
                     if command[0] == "DISCONNECT":
                         conn.send("OK".encode())
                         conn.close()
-                        break
+                        msg_socket.close()
+                        print(f"[END OF SESSION] User {username} disconnected.")
+                        connected = False
 
                     elif command[0] == "LU":
                         conn.send(f"{username}\n".encode())
@@ -42,7 +58,8 @@ with socket(AF_INET, SOCK_STREAM) as s:
                     else:
                         conn.send("Violating protocols. Being disconnected from server.".encode())
                         conn.close()
-                        break
+                        msg_socket.close()
+                        connected = False
 
                 elif len(command) == 2:
 
@@ -65,13 +82,21 @@ with socket(AF_INET, SOCK_STREAM) as s:
                     conn.send("OK".encode())
 
                 elif command[0] == "MESSAGE" and len(command) >= 4:
+                    msg_socket.send("Message delivered".encode())
                     conn.send("OK".encode())
 
                 else:
                     conn.send("Violating protocols. Being disconnected from server.".encode())
                     conn.close()
-                    break
+                    msg_socket.close()
+                    connected = False
 
             else:
-                print("The client finished sending. Closing the connection.")
-                break
+                print(f"[END OF SESSION] User {username} disconnected.")
+                conn.close()
+                msg_socket.close()
+                connected = False
+
+
+print("[STARTING] Server is starting...")
+start()
