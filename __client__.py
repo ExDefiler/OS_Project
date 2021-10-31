@@ -38,7 +38,11 @@ def message_thread():
     rcv_socket = socket(AF_INET, SOCK_STREAM)
     rcv_socket.bind((HOST, PORT_RCV))
     rcv_socket.listen()
-    conn, address = rcv_socket.accept()
+    rcv_socket.settimeout(10)
+    try:
+        conn, address = rcv_socket.accept()
+    except timeout:
+        return
 
     while connected:
 
