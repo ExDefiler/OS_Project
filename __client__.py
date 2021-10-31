@@ -14,6 +14,8 @@ os.chdir(CLIENT_FOLDER)
 
 
 def configure_directory():
+    # eliminate spaces
+    # from filenames
     lf = os.listdir()
     for filename in lf:
         if ' ' in filename:
@@ -40,17 +42,23 @@ def message_thread():
 
     while connected:
 
-        message = ''
-        while '\n' not in message:
+        try:
+            message = ''
+            while '\n' not in message:
 
-            packet = conn.recv(1).decode('ascii')
+                packet = conn.recv(1).decode('ascii')
 
-            if packet:
-                message += packet
+                if packet:
+                    message += packet
 
-            else:
-                connected = False
-                break
+                else:
+                    connected = False
+                    break
+
+        except OSError as e:
+            print(e)
+            connected = False
+            break
 
         if message == "DISCONNECT\n":
             connected = False
@@ -90,155 +98,162 @@ def protocol_thread(client_socket, username):
             if not connected:
                 continue
 
-            if len(command) == 1:
+            try:
 
-                if command[0] == "disconnect":
-                    client_socket.send("DISCONNECT\n".encode('ascii'))
-                    response = client_socket.recv(BUF_SIZE).decode('ascii')
-                    if response == 'OK\n':
-                        connected = False
-                        break
-                    else:
-                        print_screen.acquire()
-                        print("Failed to disconnect.")
-                        print_screen.release()
+                if len(command) == 1:
 
-                elif command[0] == "lu":
-                    client_socket.send("LU\n".encode('ascii'))
-                    print_response(client_socket)
+                    if command[0] == "disconnect":
+                        client_socket.send("DISCONNECT\n".encode('ascii'))
+                        response = client_socket.recv(BUF_SIZE).decode('ascii')
+                        if response == 'OK\n':
+                            connected = False
+                            break
+                        else:
+                            print_screen.acquire()
+                            print("Failed to disconnect.")
+                            print_screen.release()
 
-                elif command[0] == "lf":
-                    client_socket.send("LF\n".encode('ascii'))
-                    print_response(client_socket)
-
-                elif command[0] == "quit":
-                    print_screen.acquire()
-                    print("Program is finishing.")
-                    print_screen.release()
-                    connected = False
-                    running = False
-                    break
-
-                else:
-                    print_screen.acquire()
-                    print("Wrong command! Try another pattern.\n")
-                    print_screen.release()
-
-            elif len(command) == 2:
-
-                if command[0] == "read":
-                    if command[1] in os.listdir():
-                        print(f"[FILENAME ERROR] The directory already contains a file with name: {command[1]}\n")
-                        continue
-                    client_socket.send(f"READ {command[1]}\n".encode('ascii'))
-                    response = print_response(client_socket)
-                    if response == "OK\n":
-                        filesize = ''
-                        while ' ' not in filesize:
-                            char = client_socket.recv(1).decode('ascii')
-                            filesize += char
-                        filesize = int(filesize[:-1])
-                        bytes_read = client_socket.recv(filesize)
-                        with open(command[1], "wb") as f:
-                            f.write(bytes_read)
-
-                elif command[0] == "write":
-                    if command[1] in os.listdir():
-                        client_socket.send(f"WRITE {command[1]}\n".encode('ascii'))
-                        response = print_response(client_socket)
-                        if response == "OK\n":
-                            filesize = os.path.getsize(command[1])
-                            client_socket.send(f'{str(filesize)} '.encode('ascii'))
-                            with open(command[1], 'rb') as f:
-                                filecontent = f.read()
-                                client_socket.sendall(filecontent)
-                            print_response(client_socket)
-                    else:
-                        print(f"[FILENAME ERROR] The directory contains no file with name: {command[1]}\n")
-
-                elif command[0] == "overread":
-                    client_socket.send(f"OVERREAD {command[1]}\n".encode('ascii'))
-                    response = print_response(client_socket)
-                    if response == "OK\n":
-                        filesize = ''
-                        while ' ' not in filesize:
-                            char = client_socket.recv(1).decode('ascii')
-                            filesize += char
-                        filesize = int(filesize[:-1])
-                        bytes_read = client_socket.recv(filesize)
-                        with open(command[1], "wb") as f:
-                            f.write(bytes_read)
-
-                elif command[0] == "overwrite":
-                    if command[1] in os.listdir():
-                        client_socket.send(f"OVERWRITE {command[1]}\n".encode('ascii'))
-                        response = print_response(client_socket)
-                        if response == "OK\n":
-                            filesize = os.path.getsize(command[1])
-                            client_socket.send(f'{str(filesize)} '.encode('ascii'))
-                            with open(command[1], 'rb') as f:
-                                filecontent = f.read()
-                                client_socket.sendall(filecontent)
-                            print_response(client_socket)
-                    else:
-                        print(f"[FILENAME ERROR] The directory contains no file with name: {command[1]}\n")
-
-                else:
-                    print_screen.acquire()
-                    print("Wrong command! Try another pattern.\n")
-                    print_screen.release()
-
-            elif command[0] == "appendfile" and len(command) == 3:
-                if command[1] not in os.listdir():
-                    print(f"[FILENAME ERROR] The directory contains no file with name: {command[1]}\n")
-                    continue
-
-                client_socket.send(f"APPENDFILE {command[1]} {command[2]}\n".encode('ascii'))
-                response = print_response(client_socket)
-                if response == "OK\n":
-                    filesize = os.path.getsize(command[1])
-                    client_socket.send(f'{str(filesize)} '.encode('ascii'))
-                    with open(command[1], 'rb') as f:
-                        filecontent = f.read()
-                        client_socket.sendall(filecontent)
-                    print_response(client_socket)
-
-            elif command[0] == "send" and len(command) >= 3:
-
-                if command[2].startswith('"') and command[-1].endswith('"'):
-                    message = ''
-                    for i in range(2, len(command)):
-                        message = message + command[i] + ' '
-                    message = message.strip('" ')
-                    client_socket.send(f"MESSAGE {command[1]}\n{len(message.encode('ascii'))} {message}".encode('ascii'))
-                    print_response(client_socket)
-
-                else:
-                    print('The message to be sent must come inside double quotation marks: "..."')
-
-            elif command[0] == "append" and len(command) >= 3:
-
-                if command[1].startswith('"') and command[-2].endswith('"'):
-                    client_socket.send(f"APPEND {command[-1]}\n".encode())
-                    response = print_response(client_socket)
-                    if response == "OK\n":
-                        content = ''
-                        for word in command[1:-1]:
-                            content += word
-                            content += ' '
-                        content = content.strip('" ')
-                        content = content.encode('ascii')
-                        client_socket.send(f"{str(len(content))} ".encode('ascii'))
-                        client_socket.send(content)
+                    elif command[0] == "lu":
+                        client_socket.send("LU\n".encode('ascii'))
                         print_response(client_socket)
 
-                else:
-                    print('The content to be appended must come inside double quotation marks: "..."')
+                    elif command[0] == "lf":
+                        client_socket.send("LF\n".encode('ascii'))
+                        print_response(client_socket)
 
-            else:
-                print_screen.acquire()
-                print("Wrong command! Try another pattern.\n")
-                print_screen.release()
+                    elif command[0] == "quit":
+                        print_screen.acquire()
+                        print("Program is finishing.")
+                        print_screen.release()
+                        connected = False
+                        running = False
+                        break
+
+                    else:
+                        print_screen.acquire()
+                        print("Wrong command! Try another pattern.\n")
+                        print_screen.release()
+
+                elif len(command) == 2:
+
+                    if command[0] == "read":
+                        if command[1] in os.listdir():
+                            print(f"[FILENAME ERROR] The directory already contains a file with name: {command[1]}\n")
+                            continue
+                        client_socket.send(f"READ {command[1]}\n".encode('ascii'))
+                        response = print_response(client_socket)
+                        if response == "OK\n":
+                            filesize = ''
+                            while ' ' not in filesize:
+                                char = client_socket.recv(1).decode('ascii')
+                                filesize += char
+                            filesize = int(filesize[:-1])
+                            bytes_read = client_socket.recv(filesize)
+                            with open(command[1], "wb") as f:
+                                f.write(bytes_read)
+
+                    elif command[0] == "write":
+                        if command[1] in os.listdir():
+                            client_socket.send(f"WRITE {command[1]}\n".encode('ascii'))
+                            response = print_response(client_socket)
+                            if response == "OK\n":
+                                filesize = os.path.getsize(command[1])
+                                client_socket.send(f'{str(filesize)} '.encode('ascii'))
+                                with open(command[1], 'rb') as f:
+                                    filecontent = f.read()
+                                    client_socket.sendall(filecontent)
+                                print_response(client_socket)
+                        else:
+                            print(f"[FILENAME ERROR] The directory contains no file with name: {command[1]}\n")
+
+                    elif command[0] == "overread":
+                        client_socket.send(f"OVERREAD {command[1]}\n".encode('ascii'))
+                        response = print_response(client_socket)
+                        if response == "OK\n":
+                            filesize = ''
+                            while ' ' not in filesize:
+                                char = client_socket.recv(1).decode('ascii')
+                                filesize += char
+                            filesize = int(filesize[:-1])
+                            bytes_read = client_socket.recv(filesize)
+                            with open(command[1], "wb") as f:
+                                f.write(bytes_read)
+
+                    elif command[0] == "overwrite":
+                        if command[1] in os.listdir():
+                            client_socket.send(f"OVERWRITE {command[1]}\n".encode('ascii'))
+                            response = print_response(client_socket)
+                            if response == "OK\n":
+                                filesize = os.path.getsize(command[1])
+                                client_socket.send(f'{str(filesize)} '.encode('ascii'))
+                                with open(command[1], 'rb') as f:
+                                    filecontent = f.read()
+                                    client_socket.sendall(filecontent)
+                                print_response(client_socket)
+                        else:
+                            print(f"[FILENAME ERROR] The directory contains no file with name: {command[1]}\n")
+
+                    else:
+                        print_screen.acquire()
+                        print("Wrong command! Try another pattern.\n")
+                        print_screen.release()
+
+                elif command[0] == "appendfile" and len(command) == 3:
+                    if command[1] not in os.listdir():
+                        print(f"[FILENAME ERROR] The directory contains no file with name: {command[1]}\n")
+                        continue
+
+                    client_socket.send(f"APPENDFILE {command[1]} {command[2]}\n".encode('ascii'))
+                    response = print_response(client_socket)
+                    if response == "OK\n":
+                        filesize = os.path.getsize(command[1])
+                        client_socket.send(f'{str(filesize)} '.encode('ascii'))
+                        with open(command[1], 'rb') as f:
+                            filecontent = f.read()
+                            client_socket.sendall(filecontent)
+                        print_response(client_socket)
+
+                elif command[0] == "send" and len(command) >= 3:
+
+                    if command[2].startswith('"') and command[-1].endswith('"'):
+                        message = ''
+                        for i in range(2, len(command)):
+                            message = message + command[i] + ' '
+                        message = message.strip('" ')
+                        client_socket.send(f"MESSAGE {command[1]}\n{len(message.encode('ascii'))} {message}".encode('ascii'))
+                        print_response(client_socket)
+
+                    else:
+                        print('The message to be sent must come inside double quotation marks: "..."')
+
+                elif command[0] == "append" and len(command) >= 3:
+
+                    if command[1].startswith('"') and command[-2].endswith('"'):
+                        client_socket.send(f"APPEND {command[-1]}\n".encode())
+                        response = print_response(client_socket)
+                        if response == "OK\n":
+                            content = ''
+                            for word in command[1:-1]:
+                                content += word
+                                content += ' '
+                            content = content.strip('" ')
+                            content = content.encode('ascii')
+                            client_socket.send(f"{str(len(content))} ".encode('ascii'))
+                            client_socket.send(content)
+                            print_response(client_socket)
+
+                    else:
+                        print('The content to be appended must come inside double quotation marks: "..."')
+
+                else:
+                    print_screen.acquire()
+                    print("Wrong command! Try another pattern.\n")
+                    print_screen.release()
+
+            except OSError as e:
+                print(e)
+                connected = False
+                break
 
 
 configure_directory()
