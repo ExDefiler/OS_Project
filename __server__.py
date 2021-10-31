@@ -331,13 +331,16 @@ def start():
     global INTERRUPTED
 
     server.listen()
+    server.settimeout(2)
     print(f"[LISTENING] Server is listening on {SERVER}")
     initial_active = active_count()
 
     try:
         while True:
-
-            conn, address = server.accept()
+            try:
+                conn, address = server.accept()
+            except timeout:
+                continue
             thread = Thread(target=client_handler, args=(conn, address))
             thread.start()
 
