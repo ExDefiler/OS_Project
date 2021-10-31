@@ -66,9 +66,14 @@ def client_handler(conn, address):
     while connected and not INTERRUPTED:
 
         try:
+            conn.settimeout(2)
             command = ''
             while '\n' not in command and not INTERRUPTED:
-                packet = conn.recv(1).decode('ascii')
+                try:
+                    packet = conn.recv(1).decode('ascii')
+                except timeout:
+                    continue
+
                 if packet:
                     command += packet
                 else:
@@ -83,6 +88,7 @@ def client_handler(conn, address):
             msg_socket.send("DISCONNECT\n".encode('ascii'))
             break
 
+        conn.settimeout(None)
         command = command.split()
 
         try:
